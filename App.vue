@@ -1,11 +1,7 @@
 <template>
-
   <div>
     <!-- Bouton de navigation principal -->
-    <button 
-      @click="toggleView"
-      class="nav-button"
-    >
+    <button @click="toggleView" class="nav-button">
       {{ showEnvironments ? 'Retour au questionnaire' : 'Voir les environnements' }}
     </button>
 
@@ -14,12 +10,14 @@
       <div class="main-panel">
         
         <!-- Titre avec style pastel -->
-        <h1 class="main-title">
-          Questionnaire sur la concentration et l'organisation du travail
-        </h1>
+        <div class="title-container">
+          <h1 class="main-title">
+            Questionnaire sur la concentration et l'organisation du travail
+          </h1>
+        </div>
         
         <!-- Contenu du questionnaire (visible uniquement si non terminé) -->
-        <div v-if="!termine">
+        <div v-if="!termine" class="questionnaire-content">
           <!-- Catégorie actuelle - style pastel -->
           <div class="category-header">
             <h2>{{ categories[currentCategoryIndex] }}</h2>
@@ -50,80 +48,105 @@
           
           <!-- Options de réponse avec design pastel -->
           <div v-if="currentQuestion.type === 'choix'" class="choices-container">
-            <button
-              v-for="(option, index) in currentQuestion.options"
-              :key="index"
-              @click="choisir(option.texte, option.valeur)"
-              class="choice-button"
-            >
-              <span class="choice-letter">{{ String.fromCharCode(97 + index) }}</span>
-              <span>{{ option.texte }}</span>
-            </button>
+            <div class="choices-wrapper">
+              <button
+                v-for="(option, index) in currentQuestion.options"
+                :key="index"
+                @click="choisir(option.texte, option.valeur)"
+                class="choice-button"
+              >
+                <span class="choice-letter">{{ String.fromCharCode(97 + index) }}</span>
+                <span class="choice-text">{{ option.texte }}</span>
+              </button>
+            </div>
           </div>
 
           <!-- Question spéciale (réponse ouverte) avec style pastel -->
           <div v-if="currentQuestion.type === 'ouvert'" class="open-response">
-            <textarea 
-              v-model="reponseOuverte" 
-              placeholder="Votre réponse..."
-              class="open-textarea"
-            ></textarea>
-            <button 
-              @click="soumettreReponseOuverte" 
-              class="submit-button"
-            >
-              Soumettre
-            </button>
+            <div class="textarea-container">
+              <textarea 
+                v-model="reponseOuverte" 
+                placeholder="Votre réponse..."
+                class="open-textarea"
+              ></textarea>
+            </div>
+            <div class="submit-container">
+              <button 
+                @click="soumettreReponseOuverte" 
+                class="submit-button"
+              >
+                Soumettre
+              </button>
+            </div>
           </div>
         </div>
         
+        <!-- Écran de fin -->
         <div v-if="termine" class="completion-screen">
-  <div class="completion-circle">
-    <span>✓</span>
-  </div>
-  <h2 class="completion-title">Résultat</h2>
-  
-  <div class="concentration-result">
-    <p>Votre niveau de concentration est : 
-      <span class="concentration-level" :data-level="concentrationLevel">
-        {{ concentrationLevel || 'En cours d\'analyse...' }}
-      </span>
-    </p>
-    
-    <p class="completion-text">Nous avons adapté votre environnement d'étude selon votre profil.</p>
-  </div>
-  
-  <button 
-    @click="toggleView" 
-    class="start-study-button"
-  >
-    Commencer l'étude
-  </button>
-</div>
+          <div class="completion-content">
+            <div class="completion-circle">
+              <span>✓</span>
+            </div>
+            <h2 class="completion-title">Résultat</h2>
+            
+            <div class="concentration-result">
+              <p>Votre niveau de concentration est : 
+                <span class="concentration-level" :data-level="concentrationLevel">
+                  {{ concentrationLevel || 'En cours d\'analyse...' }}
+                </span>
+              </p>
+              
+              <p class="completion-text">Nous avons analysé votre profil de concentration.</p>
+              <p v-if="scoreDetails">
+                Organisation: {{ Math.round(scoreDetails.organisation * 100) }}% | 
+                Concentration: {{ Math.round(scoreDetails.concentration * 100) }}% | 
+                Motivation: {{ Math.round(scoreDetails.motivation * 100) }}%
+              </p>
+            </div>
+            
+            <div class="button-container">
+              <button 
+                @click="navigateToTimeTable" 
+                class="start-study-button"
+              >
+                Commencer l'étude
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     
     <!-- Vue des environnements -->
-    <App2Component 
-      v-if="showEnvironments"
-      :concentrationLevel="getConcentrationLevel()"
-    />
+    <div v-if="showEnvironments" class="environments-view">
+      <EmploiUpload 
+        :niveau="concentrationLevel"
+        ref="emploiUpload"
+      />
+      <EmploiCree 
+  :niveau="concentrationLevel" 
+  @enregistrer="handleEnregistrement"
+/>
+    </div>
   </div>
 </template>
 
 <script>
 import axios from 'axios';
-import App2Component from './App2Component.vue';
+import EmploiCree from './EmploiCree.vue'; // Ajustez le chemin selon votre structure
 
 export default {
-
-  components: { App2Component },
+  components: {
+    EmploiCree,
+  },
   data() {
     return {
       concentrationLevel: null,
-
+      niveauDetecte: null,
       showEnvironments: false,
       termine: false,
+      timetableData: [],
+      scoreDetails: null,
       categories: [
         "Organisation des études",
         "Habitudes de travail et concentration",
@@ -131,142 +154,142 @@ export default {
         "Personnalisation et suggestions"
       ],
       questionsParCategorie: [
-  // Catégorie 1: Organisation des études
-  [
-    {
-      texte: "Comment organises-tu ton emploi du temps ?",
-      type: "choix",
-      options: [
-        { texte: "J'ai un planning détaillé et je le respecte", valeur: 3 },
-        { texte: "J'ai un planning, mais j'ai du mal à le suivre", valeur: 2 },
-        { texte: "Je n'ai pas de planning précis", valeur: 1 }
-      ]
-    },
-    {
-      texte: "À quelle fréquence procrastines-tu ?",
-      type: "choix",
-      options: [
-        { texte: "Très rarement, je fais mes tâches immédiatement", valeur: 3 },
-        { texte: "Parfois, surtout pour les tâches longues", valeur: 2 },
-        { texte: "Souvent, je reporte jusqu'à la dernière minute", valeur: 1 }
-      ]
-    },
-    {
-      texte: "Comment gères-tu les distractions en étudiant ?",
-      type: "choix",
-      options: [
-        { texte: "J'éteins mon téléphone et je me coupe des distractions", valeur: 3 },
-        { texte: "Je consulte parfois mon téléphone, mais je me reconcentre vite", valeur: 2 },
-        { texte: "Je suis souvent distrait(e) et j'ai du mal à revenir à mon travail", valeur: 1 }
-      ]
-    },
-    {
-      texte: "As-tu l'habitude de planifier tes objectifs pour la semaine ?",
-      type: "choix",
-      options: [
-        { texte: "Oui, je les note et je les suis", valeur: 3 },
-        { texte: "Je les ai en tête sans les noter", valeur: 2 },
-        { texte: "Je n’y pense pas vraiment", valeur: 1 }
-      ]
-    }
-  ],
-  // Catégorie 2: Habitudes de travail et concentration
-  [
-    {
-      texte: "Combien de temps arrives-tu à rester concentré(e) sans interruption ?",
-      type: "choix",
-      options: [
-        { texte: "Plus de 45 minutes", valeur: 3 },
-        { texte: "Entre 20 et 45 minutes", valeur: 2 },
-        { texte: "Moins de 20 minutes", valeur: 1 }
-      ]
-    },
-    {
-      texte: "Quel environnement de travail préfères-tu ?",
-      type: "choix",
-      options: [
-        { texte: "Un lieu calme et structuré", valeur: 3 },
-        { texte: "Un lieu avec du bruit modéré (café, musique en fond)", valeur: 2 },
-        { texte: "Peu importe, je travaille n'importe où", valeur: 1 }
-      ]
-    },
-    {
-      texte: "Quand tu étudies, quelles sont tes principales distractions ?",
-      type: "choix",
-      options: [
-        { texte: "Aucune, je reste très concentré(e)", valeur: 3 },
-        { texte: "Téléphone et réseaux sociaux", valeur: 2 },
-        { texte: "Je me laisse distraire par tout ce qui m'entoure", valeur: 1 }
-      ]
-    },
-    {
-      texte: "Étudies-tu plutôt le matin, l’après-midi ou le soir ?",
-      type: "choix",
-      options: [
-        { texte: "Le matin, quand je suis le plus frais(che)", valeur: 3 },
-        { texte: "L’après-midi, selon les disponibilités", valeur: 2 },
-        { texte: "Le soir, parfois tard", valeur: 1 }
-      ]
-    }
-  ],
-  // Catégorie 3: Gestion des pauses et de la motivation
-  [
-    {
-      texte: "Comment prends-tu tes pauses ?",
-      type: "choix",
-      options: [
-        { texte: "Je fais des pauses structurées (ex: technique Pomodoro)", valeur: 3 },
-        { texte: "Je prends des pauses aléatoires", valeur: 2 },
-        { texte: "Je ne prends pas vraiment de pauses, ou j'en prends trop souvent", valeur: 1 }
-      ]
-    },
-    {
-      texte: "Qu'est-ce qui t'aide à rester concentré(e) ?",
-      type: "choix",
-      options: [
-        { texte: "Un environnement calme et une bonne organisation", valeur: 3 },
-        { texte: "De la musique ou des bruits de fond", valeur: 2 },
-        { texte: "Rien, j'ai du mal à rester concentré(e)", valeur: 1 }
-      ]
-    },
-    {
-      texte: "Utilises-tu des outils pour améliorer ta concentration (applications, méthodes de productivité) ?",
-      type: "choix",
-      options: [
-        { texte: "Oui, et ça m'aide beaucoup", valeur: 3 },
-        { texte: "J'ai essayé, mais ça ne marche pas toujours", valeur: 2 },
-        { texte: "Non, je n'en utilise pas", valeur: 1 }
-      ]
-    },
-    {
-      texte: "Lorsque tu perds ta motivation, que fais-tu ?",
-      type: "choix",
-      options: [
-        { texte: "Je fais une pause ou change de tâche temporairement", valeur: 3 },
-        { texte: "Je continue avec difficulté", valeur: 2 },
-        { texte: "J’abandonne temporairement", valeur: 1 }
-      ]
-    }
-  ],
-  // Catégorie 4: Personnalisation et suggestions
-  [
-    {
-      texte: "Quelle fonctionnalité te semblerait la plus utile dans une application d'organisation ?",
-      type: "choix",
-      options: [
-        { texte: "Un planificateur intelligent qui adapte mon emploi du temps", valeur: 7 },
-        { texte: "Un gestionnaire de tâches avec rappels", valeur: 6 },
-        { texte: "Un outil pour suivre ma concentration et mes performances", valeur: 5 },
-        { texte: "Un assistant qui me donne des conseils pour améliorer ma productivité", valeur: 4 }
-      ]
-    },
-    {
-      texte: "Si ton niveau de concentration pouvait être évalué en temps réel, comment voudrais-tu que l'application adapte ton environnement de travail ?",
-      type: "ouvert",
-      options: []
-    }
-  ]
-],
+        // Catégorie 1: Organisation des études
+        [
+          {
+            texte: "Comment organises-tu ton emploi du temps ?",
+            type: "choix",
+            options: [
+              { texte: "J'ai un planning détaillé et je le respecte", valeur: 3 },
+              { texte: "J'ai un planning, mais j'ai du mal à le suivre", valeur: 2 },
+              { texte: "Je n'ai pas de planning précis", valeur: 1 }
+            ]
+          },
+          {
+            texte: "À quelle fréquence procrastines-tu ?",
+            type: "choix",
+            options: [
+              { texte: "Très rarement, je fais mes tâches immédiatement", valeur: 3 },
+              { texte: "Parfois, surtout pour les tâches longues", valeur: 2 },
+              { texte: "Souvent, je reporte jusqu'à la dernière minute", valeur: 1 }
+            ]
+          },
+          {
+            texte: "Comment gères-tu les distractions en étudiant ?",
+            type: "choix",
+            options: [
+              { texte: "J'éteins mon téléphone et je me coupe des distractions", valeur: 3 },
+              { texte: "Je consulte parfois mon téléphone, mais je me reconcentre vite", valeur: 2 },
+              { texte: "Je suis souvent distrait(e) et j'ai du mal à revenir à mon travail", valeur: 1 }
+            ]
+          },
+          {
+            texte: "As-tu l'habitude de planifier tes objectifs pour la semaine ?",
+            type: "choix",
+            options: [
+              { texte: "Oui, je les note et je les suis", valeur: 3 },
+              { texte: "Je les ai en tête sans les noter", valeur: 2 },
+              { texte: "Je n'y pense pas vraiment", valeur: 1 }
+            ]
+          }
+        ],
+        // Catégorie 2: Habitudes de travail et concentration
+        [
+          {
+            texte: "Combien de temps arrives-tu à rester concentré(e) sans interruption ?",
+            type: "choix",
+            options: [
+              { texte: "Plus de 45 minutes", valeur: 3 },
+              { texte: "Entre 20 et 45 minutes", valeur: 2 },
+              { texte: "Moins de 20 minutes", valeur: 1 }
+            ]
+          },
+          {
+            texte: "Quel environnement de travail préfères-tu ?",
+            type: "choix",
+            options: [
+              { texte: "Un lieu calme et structuré", valeur: 3 },
+              { texte: "Un lieu avec du bruit modéré (café, musique en fond)", valeur: 2 },
+              { texte: "Peu importe, je travaille n'importe où", valeur: 1 }
+            ]
+          },
+          {
+            texte: "Quand tu étudies, quelles sont tes principales distractions ?",
+            type: "choix",
+            options: [
+              { texte: "Aucune, je reste très concentré(e)", valeur: 3 },
+              { texte: "Téléphone et réseaux sociaux", valeur: 2 },
+              { texte: "Je me laisse distraire par tout ce qui m'entoure", valeur: 1 }
+            ]
+          },
+          {
+            texte: "Étudies-tu plutôt le matin, l'après-midi ou le soir ?",
+            type: "choix",
+            options: [
+              { texte: "Le matin, quand je suis le plus frais(che)", valeur: 3 },
+              { texte: "L'après-midi, selon les disponibilités", valeur: 2 },
+              { texte: "Le soir, parfois tard", valeur: 1 }
+            ]
+          }
+        ],
+        // Catégorie 3: Gestion des pauses et de la motivation
+        [
+          {
+            texte: "Comment prends-tu tes pauses ?",
+            type: "choix",
+            options: [
+              { texte: "Je fais des pauses structurées (ex: technique Pomodoro)", valeur: 3 },
+              { texte: "Je prends des pauses aléatoires", valeur: 2 },
+              { texte: "Je ne prends pas vraiment de pauses, ou j'en prends trop souvent", valeur: 1 }
+            ]
+          },
+          {
+            texte: "Qu'est-ce qui t'aide à rester concentré(e) ?",
+            type: "choix",
+            options: [
+              { texte: "Un environnement calme et une bonne organisation", valeur: 3 },
+              { texte: "De la musique ou des bruits de fond", valeur: 2 },
+              { texte: "Rien, j'ai du mal à rester concentré(e)", valeur: 1 }
+            ]
+          },
+          {
+            texte: "Utilises-tu des outils pour améliorer ta concentration (applications, méthodes de productivité) ?",
+            type: "choix",
+            options: [
+              { texte: "Oui, et ça m'aide beaucoup", valeur: 3 },
+              { texte: "J'ai essayé, mais ça ne marche pas toujours", valeur: 2 },
+              { texte: "Non, je n'en utilise pas", valeur: 1 }
+            ]
+          },
+          {
+            texte: "Lorsque tu perds ta motivation, que fais-tu ?",
+            type: "choix",
+            options: [
+              { texte: "Je fais une pause ou change de tâche temporairement", valeur: 3 },
+              { texte: "Je continue avec difficulté", valeur: 2 },
+              { texte: "J'abandonne temporairement", valeur: 1 }
+            ]
+          }
+        ],
+        // Catégorie 4: Personnalisation et suggestions
+        [
+          {
+            texte: "Quelle fonctionnalité te semblerait la plus utile dans une application d'organisation ?",
+            type: "choix",
+            options: [
+              { texte: "Un planificateur intelligent qui adapte mon emploi du temps", valeur: 7 },
+              { texte: "Un gestionnaire de tâches avec rappels", valeur: 6 },
+              { texte: "Un outil pour suivre ma concentration et mes performances", valeur: 5 },
+              { texte: "Un assistant qui me donne des conseils pour améliorer ma productivité", valeur: 4 }
+            ]
+          },
+          {
+            texte: "Si ton niveau de concentration pouvait être évalué en temps réel, comment voudrais-tu que l'application adapte ton environnement de travail ?",
+            type: "ouvert",
+            options: []
+          }
+        ]
+      ],
       reponses: [],
       valeursConcentration: [],
       currentCategoryIndex: 0,
@@ -293,65 +316,83 @@ export default {
     }
   },
   methods: {
-  toggleView() {
-    this.showEnvironments = !this.showEnvironments;
-  },
-  
-  choisir(reponse, valeur) {
-    this.reponses.push({ question: this.currentQuestion.texte, reponse: reponse });
-    this.valeursConcentration.push(valeur);
-    this.avancerQuestion();
-  },
-  
-  soumettreReponseOuverte() {
-    if (this.reponseOuverte.trim() !== "") {
-      this.reponses.push({ 
-        question: this.currentQuestion.texte, 
-        reponse: this.reponseOuverte 
+    navigateToTimeTable() {
+      this.showEnvironments = true;
+      this.$nextTick(() => {
+        if (this.$refs.emploiUpload) {
+          this.timetableData = this.$refs.emploiUpload.timetableData;
+        }
       });
-      this.reponseOuverte = "";
+    },
+    toggleView() {
+      this.showEnvironments = !this.showEnvironments;
+    },
+    choisir(reponse, valeur) {
+      this.reponses.push({ question: this.currentQuestion.texte, reponse: reponse });
+      this.valeursConcentration.push(valeur);
       this.avancerQuestion();
-    }
-  },
-  
-  avancerQuestion() {
-    if (this.currentQuestionIndex < this.questionsParCategorie[this.currentCategoryIndex].length - 1) {
-      this.currentQuestionIndex++;
-    } else if (this.currentCategoryIndex < this.questionsParCategorie.length - 1) {
-      this.currentCategoryIndex++;
+    },
+    soumettreReponseOuverte() {
+      if (this.reponseOuverte.trim() !== "") {
+        this.reponses.push({ 
+          question: this.currentQuestion.texte, 
+          reponse: this.reponseOuverte 
+        });
+        this.reponseOuverte = "";
+        this.avancerQuestion();
+      }
+    },
+    avancerQuestion() {
+      if (this.currentQuestionIndex < this.questionsParCategorie[this.currentCategoryIndex].length - 1) {
+        this.currentQuestionIndex++;
+      } else if (this.currentCategoryIndex < this.questionsParCategorie.length - 1) {
+        this.currentCategoryIndex++;
+        this.currentQuestionIndex = 0;
+      } else {
+        this.termine = true;
+        this.analyserReponses();
+      }
+    },
+    analyserReponses() {
+      console.log("Analyse des réponses en cours...");
+      
+      // Utilisation d'axios pour envoyer les données
+      axios.post('http://localhost:5000/api/analyser', {
+        valeursConcentration: this.valeursConcentration
+      })
+      .then(response => {
+        console.log("Réponse API reçue:", response.data);
+        if (response.data && response.data.niveau) {
+          this.concentrationLevel = response.data.niveau;
+          this.niveauDetecte = response.data.niveau;
+          
+          // Stocker les détails des scores si disponibles
+          if (response.data.scores_details) {
+            this.scoreDetails = response.data.scores_details;
+          }
+        } else {
+          console.error("Réponse invalide de l'API:", response.data);
+          this.concentrationLevel = "indéterminé";
+        }
+      })
+      .catch(error => {
+        console.error("Erreur lors de l'analyse:", error);
+        this.concentrationLevel = "erreur";
+      });
+    },
+    recommencer() {
+      this.currentCategoryIndex = 0;
       this.currentQuestionIndex = 0;
-    } else {
-      this.envoyerReponses();
-      this.termine = true;
+      this.reponses = [];
+      this.valeursConcentration = [];
+      this.reponseOuverte = "";
+      this.termine = false;
+      this.showEnvironments = false;
+      this.concentrationLevel = null;
+      this.scoreDetails = null;
     }
-  },
-  
-
-  envoyerReponses() {
-    axios.post('http://localhost:5000/api/analyser', {
-      valeursConcentration: this.valeursConcentration
-    })
-    .then(response => {
-      this.concentrationLevel = response.data.niveau; // "faible", "moyen" ou "élevé"
-    })
-    .catch(error => console.error(error));
   }
-},
-  
-  recommencer() {
-    this.currentCategoryIndex = 0;
-    this.currentQuestionIndex = 0;
-    this.reponses = [];
-    this.valeursConcentration = [];
-    this.reponseOuverte = "";
-    this.termine = false;
-    this.showEnvironments = false;
-  },
-  
-  
-  
 }
-
 </script>
 
 <style>
@@ -579,6 +620,7 @@ body {
 
 .completion-circle span {
   font-size: 45px;
+  color: white;
 }
 
 .completion-title {
